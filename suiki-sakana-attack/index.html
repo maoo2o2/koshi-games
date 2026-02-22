@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>すいきゲーム 🐧</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0f2e;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'Segoe UI Emoji', 'Apple Color Emoji', sans-serif;
+    color: #fff;
+  }
+  h1 { font-size: 2rem; margin-bottom: 8px; letter-spacing: 0.1em; }
+  #ui { display: flex; gap: 32px; margin-bottom: 8px; font-size: 1.1rem; }
+  canvas {
+    border: 3px solid #334;
+    border-radius: 12px;
+    background: #111a3e;
+    display: block;
+  }
+  #hint { margin-top: 10px; font-size: 0.85rem; color: #aac; }
+  #overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    font-size: 1.5rem;
+    gap: 16px;
+  }
+  #overlay button {
+    padding: 12px 32px;
+    font-size: 1.2rem;
+    border: none;
+    border-radius: 8px;
+    background: #4af;
+    color: #000;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  #overlay button:hover { background: #6cf; }
+  #wrap { position: relative; }
+</style>
+</head>
+<body>
+<h1>🐧 すいきゲーム</h1>
+<div id="ui">
+  <span>スコア: <strong id="score">0</strong></span>
+  <span>ライフ: <strong id="lives">❤️❤️❤️</strong></span>
+  <span>レベル: <strong id="level">1</strong></span>
+</div>
+<div id="wrap">
+  <canvas id="canvas" width="480" height="600"></canvas>
+  <div id="overlay">
+    <div>🐧 すいきゲーム 🐧</div>
+    <div style="font-size:1rem;color:#adf">魚と恐竜を撃ち落とせ！</div>
+    <button id="startBtn">スタート！</button>
+  </div>
+</div>
+<div id="hint">← → キーでペンギンを移動 / 球は自動投球！</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+// ─── State ───────────────────────────────────────────────
+let penguin, enemies, balls, particles;
+let score, lives, level, frame;
+let gameRunning = false;
+let lastBallTime = 0;
+const BALL_INTERVAL = 700; // ms between auto throws
+
+// ─── Helpers ─────────────────────────────────────────────
+function rnd(a, b) { return Math.random() * (b - a) + a; }
+function rndInt(a, b) { return Math.floor(rnd(a, b + 1)); }
+
+// ─── Emoji renderer ──────────────────────────────────────
+function emoji(e, x, y, size) {
+  ctx.font = `${size}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(e, x, y);
+}
+
+// ─── Penguin ─────────────────────────────────────────────
+function makePenguin() {
+  return {
+    x: W / 2,
+    y: H - 58,
+    w: 44,
+    h: 52,
+    speed: 5,
+    flicker: 0, // invincibility frames
+    armAngle: 0, // animation
+  };
+}
+
+function drawPenguin(p) {
+  if (p.flicker > 0 && p.flicker % 6 >= 3) return; // blink
+  const x = p.x, y = p.y;
+  ctx.save();
+  ctx.translate(x, y);
+
+  // feet
+  ctx.fillStyle = '#f90';
+  ctx.beginPath(); ctx.ellipse(-8, 22, 8, 4, -0.25, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(8, 22, 8, 4, 0.25, 0, Math.PI * 2);  ctx.fill();
+
+  // left flipper (arm swing for throw animation)
+  ctx.fillStyle = '#111a2e';
+  ctx.save();
+  ctx.translate(-14, 2);
+  ctx.rotate(-0.4 + Math.sin(p.armAngle) * 0.5);
+  ctx.beginPath(); ctx.ellipse(0, 0, 7, 14, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // right flipper (opposite swing)
+  ctx.save();
+  ctx.translate(14, 2);
+  ctx.rotate(0.4 - Math.sin(p.armAngle) * 0.5);
+  ctx.beginPath(); ctx.ellipse(0, 0, 7, 14, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // body
+  ctx.fillStyle = '#111a2e';
+  ctx.beginPath(); ctx.ellipse(0, 2, 18, 24, 0, 0, Math.PI * 2); ctx.fill();
+
+  // belly
+  ctx.fillStyle = '#eef2f8';
+  ctx.beginPath(); ctx.ellipse(0, 8, 11, 16, 0, 0, Math.PI * 2); ctx.fill();
+
+  // eyes
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(-6, -10, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(6, -10, 6, 0, Math.PI * 2);  ctx.fill();
+  ctx.fillStyle = '#111';
+  ctx.beginPath(); ctx.arc(-5, -10, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(7, -10, 3, 0, Math.PI * 2);  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(-4, -11.5, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(8, -11.5, 1.2, 0, Math.PI * 2);  ctx.fill();
+
+  // beak
+  ctx.fillStyle = '#f90';
+  ctx.beginPath();
+  ctx.moveTo(-5, -5); ctx.lineTo(5, -5); ctx.lineTo(0, 0);
+  ctx.closePath(); ctx.fill();
+
+  ctx.restore();
+}
+
+// ─── Enemies ─────────────────────────────────────────────
+const ENEMY_TYPES = [
+  { emoji: '🐟', w: 38, h: 30, hp: 1, score: 10, speed: () => rnd(1.5, 2.5) },
+  { emoji: '🐠', w: 38, h: 30, hp: 1, score: 15, speed: () => rnd(2.0, 3.0) },
+  { emoji: '🐡', w: 36, h: 36, hp: 1, score: 20, speed: () => rnd(2.5, 3.5) },
+  { emoji: '🦖', w: 54, h: 44, hp: 3, score: 50, speed: () => rnd(0.8, 1.5) },
+];
+
+function spawnEnemy(lv) {
+  // higher level = more T-Rex
+  const pool = lv < 3
+    ? ENEMY_TYPES.filter(t => t.emoji !== '🦖')
+    : ENEMY_TYPES;
+  const t = pool[rndInt(0, pool.length - 1)];
+  return {
+    ...t,
+    maxHp: t.hp,
+    hp: t.hp,
+    x: rnd(t.w / 2 + 8, W - t.w / 2 - 8),
+    y: -t.h,
+    speed: t.speed(),
+    wobble: rnd(0, Math.PI * 2),
+    wobbleSpeed: rnd(0.02, 0.06),
+    wobbleAmp: rnd(0, lv > 2 ? 1.5 : 0.5),
+  };
+}
+
+// ─── Balls ───────────────────────────────────────────────
+function makeBall(x, y) {
+  return { x, y, r: 9, w: 18, speed: 10 };
+}
+
+// ─── Particles ───────────────────────────────────────────
+function burst(x, y, e, count = 6) {
+  for (let i = 0; i < count; i++) {
+    const angle = rnd(0, Math.PI * 2);
+    const spd = rnd(2, 6);
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * spd,
+      vy: Math.sin(angle) * spd,
+      life: 1,
+      decay: rnd(0.03, 0.07),
+      size: rnd(14, 24),
+      emoji: e,
+    });
+  }
+}
+
+// ─── Init ────────────────────────────────────────────────
+function initGame() {
+  penguin = makePenguin();
+  enemies = [];
+  balls = [];
+  particles = [];
+  score = 0;
+  lives = 3;
+  level = 1;
+  frame = 0;
+  lastBallTime = 0;
+  updateUI();
+}
+
+// ─── Keys ────────────────────────────────────────────────
+const keys = {};
+document.addEventListener('keydown', e => { keys[e.key] = true; });
+document.addEventListener('keyup',   e => { keys[e.key] = false; });
+
+// ─── UI ──────────────────────────────────────────────────
+function updateUI() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('level').textContent = level;
+  const h = ['', '❤️', '❤️❤️', '❤️❤️❤️'];
+  document.getElementById('lives').textContent = h[Math.max(0, lives)] || '💀';
+}
+
+// ─── Spawn schedule ──────────────────────────────────────
+function spawnInterval() {
+  // faster spawning at higher levels
+  return Math.max(40, 100 - level * 8);
+}
+
+// ─── Collision (circle-ish) ───────────────────────────────
+function hit(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y;
+  const rr = (a.w + b.w) / 2 * 0.6;
+  return dx * dx + dy * dy < rr * rr;
+}
+
+// ─── Main loop ───────────────────────────────────────────
+let lastTime = 0;
+function loop(ts) {
+  if (!gameRunning) return;
+  const dt = ts - lastTime;
+  lastTime = ts;
+  frame++;
+
+  // ── Spawn ──
+  if (frame % spawnInterval() === 0) {
+    enemies.push(spawnEnemy(level));
+  }
+
+  // ── Auto throw ball ──
+  if (ts - lastBallTime > BALL_INTERVAL) {
+    balls.push(makeBall(penguin.x, penguin.y - penguin.h / 2));
+    penguin.armAngle += Math.PI; // swing arms
+    lastBallTime = ts;
+  }
+  penguin.armAngle += 0.08;
+
+  // ── Move penguin ──
+  if (keys['ArrowLeft']  || keys['a'] || keys['A']) penguin.x -= penguin.speed;
+  if (keys['ArrowRight'] || keys['d'] || keys['D']) penguin.x += penguin.speed;
+  penguin.x = Math.max(penguin.w / 2, Math.min(W - penguin.w / 2, penguin.x));
+  if (penguin.flicker > 0) penguin.flicker--;
+
+  // ── Move balls ──
+  balls = balls.filter(b => b.y > -b.r * 2);
+  balls.forEach(b => b.y -= b.speed);
+
+  // ── Move enemies + wobble ──
+  enemies.forEach(e => {
+    e.wobble += e.wobbleSpeed;
+    e.x += Math.sin(e.wobble) * e.wobbleAmp;
+    e.y += e.speed;
+  });
+
+  // ── Ball-enemy collision ──
+  const deadEnemies = new Set();
+  const deadBalls = new Set();
+
+  balls.forEach((b, bi) => {
+    enemies.forEach((e, ei) => {
+      if (deadEnemies.has(ei)) return;
+      if (hit(b, e)) {
+        e.hp--;
+        deadBalls.add(bi);
+        if (e.hp <= 0) {
+          burst(e.x, e.y, e.emoji);
+          score += e.score * level;
+          deadEnemies.add(ei);
+        } else {
+          e._hit = 8;
+        }
+      }
+    });
+  });
+  balls   = balls.filter((_, i) => !deadBalls.has(i));
+  enemies = enemies.filter((_, i) => !deadEnemies.has(i));
+
+  // ── Enemy-penguin collision ──
+  const crashedEnemies = new Set();
+  enemies.forEach((e, ei) => {
+    if (e.y > H + e.h) {
+      crashedEnemies.add(ei); // off-screen = miss (no life lost, just gone)
+      return;
+    }
+    if (penguin.flicker === 0 && hit(e, penguin)) {
+      lives--;
+      penguin.flicker = 90;
+      burst(penguin.x, penguin.y, '💥', 8);
+      crashedEnemies.add(ei);
+      updateUI();
+      if (lives <= 0) {
+        gameOver();
+        return;
+      }
+    }
+  });
+  enemies = enemies.filter((_, i) => !crashedEnemies.has(i));
+
+  // ── Level up ──
+  const newLevel = Math.floor(score / 300) + 1;
+  if (newLevel !== level) {
+    level = newLevel;
+    updateUI();
+  }
+
+  // ── Particles ──
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.15; // gravity
+    p.life -= p.decay;
+  });
+  particles = particles.filter(p => p.life > 0);
+
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ─── Draw ────────────────────────────────────────────────
+function draw() {
+  // background
+  ctx.clearRect(0, 0, W, H);
+
+  // stars
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 40; i++) {
+    const sx = ((i * 137 + frame * 0.3) % W);
+    const sy = ((i * 97  + frame * 0.1) % H);
+    ctx.globalAlpha = 0.3 + Math.sin(frame * 0.05 + i) * 0.2;
+    ctx.fillRect(sx, sy, 1.5, 1.5);
+  }
+  ctx.globalAlpha = 1;
+
+  // ocean floor
+  ctx.fillStyle = '#1a2a5a';
+  ctx.fillRect(0, H - 20, W, 20);
+  ctx.fillStyle = '#2a3a7a';
+  ctx.fillRect(0, H - 20, W, 4);
+
+  // balls
+  balls.forEach(b => {
+    const grad = ctx.createRadialGradient(b.x - 3, b.y - 3, 1, b.x, b.y, b.r);
+    grad.addColorStop(0, '#fff');
+    grad.addColorStop(0.4, '#c8e8ff');
+    grad.addColorStop(1, '#5aabff');
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.shadowColor = '#8df';
+    ctx.shadowBlur = 14;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+
+  // enemies
+  enemies.forEach(e => {
+    ctx.globalAlpha = e._hit > 0 ? (e._hit % 4 < 2 ? 0.3 : 1) : 1;
+    if (e._hit > 0) e._hit--;
+    // hp bar
+    if (e.maxHp > 1) {
+      const bw = e.w;
+      ctx.fillStyle = '#500';
+      ctx.fillRect(e.x - bw / 2, e.y - e.h / 2 - 8, bw, 5);
+      ctx.fillStyle = '#0f0';
+      ctx.fillRect(e.x - bw / 2, e.y - e.h / 2 - 8, bw * (e.hp / e.maxHp), 5);
+    }
+    emoji(e.emoji, e.x, e.y, e.w);
+    ctx.globalAlpha = 1;
+  });
+
+  // penguin
+  drawPenguin(penguin);
+
+  // particles
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life;
+    emoji(p.emoji, p.x, p.y, p.size);
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ─── Game over ───────────────────────────────────────────
+function gameOver() {
+  gameRunning = false;
+  const ov = document.getElementById('overlay');
+  ov.innerHTML = `
+    <div style="font-size:2rem">💀 ゲームオーバー</div>
+    <div>スコア: <strong style="color:#4af;font-size:1.4rem">${score}</strong></div>
+    <div>レベル: ${level}</div>
+    <button id="startBtn">もう一度！</button>
+  `;
+  ov.style.display = 'flex';
+  document.getElementById('startBtn').onclick = startGame;
+}
+
+// ─── Start ───────────────────────────────────────────────
+function startGame() {
+  document.getElementById('overlay').style.display = 'none';
+  initGame();
+  gameRunning = true;
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
+document.getElementById('startBtn').onclick = startGame;
+</script>
+</body>
+</html>
