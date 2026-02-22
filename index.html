@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>こうしのゲーム</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Hiragino Kaku Gothic Pro', sans-serif;
+    background: #0a0a2e;
+    color: #fff;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 2.5rem;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #ff6b6b, #ffd93d, #6bcb77, #4d96ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    color: #aaa;
+    margin-bottom: 40px;
+    font-size: 0.9rem;
+  }
+  .games {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .game-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    padding: 24px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s, border-color 0.2s;
+    display: block;
+  }
+  .game-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(255,255,255,0.3);
+  }
+  .game-number {
+    font-size: 0.75rem;
+    color: #888;
+    margin-bottom: 8px;
+  }
+  .game-title {
+    font-size: 1.3rem;
+    font-weight: bold;
+    margin-bottom: 8px;
+  }
+  .game-desc {
+    font-size: 0.85rem;
+    color: #aaa;
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<h1>🎮 こうしのゲーム</h1>
+<p class="subtitle">こうしが作ったゲームたち</p>
+<div class="games">
+  <!-- ゲームを追加したらここにカードを追加 -->
+</div>
+</body>
+</html>
