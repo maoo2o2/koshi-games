@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3Dスペースシューター - 航志</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000;
+  overflow: hidden;
+  font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+  cursor: none;
+}
+canvas { display: block; }
+
+/* UI Overlay */
+#ui {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+#score {
+  position: absolute; top: 20px; left: 20px;
+  color: #0ff; font-size: 24px; font-weight: bold;
+  text-shadow: 0 0 10px #0ff, 0 0 20px #0ff;
+}
+#lives {
+  position: absolute; top: 20px; right: 20px;
+  color: #f44; font-size: 24px; font-weight: bold;
+  text-shadow: 0 0 10px #f44;
+}
+#stage-info {
+  position: absolute; top: 60px; left: 20px;
+  color: #ff0; font-size: 18px;
+  text-shadow: 0 0 10px #ff0;
+}
+#boss-hp-container {
+  position: absolute; top: 90px; left: 50%; transform: translateX(-50%);
+  width: 300px; height: 20px;
+  background: rgba(255,0,0,0.2); border: 2px solid #f00;
+  border-radius: 10px; display: none;
+}
+#boss-hp {
+  height: 100%; width: 100%;
+  background: linear-gradient(90deg, #f00, #ff0);
+  border-radius: 8px; transition: width 0.3s;
+}
+#boss-label {
+  position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+  color: #f00; font-size: 16px; font-weight: bold;
+  text-shadow: 0 0 10px #f00; display: none;
+}
+#powerup-display {
+  position: absolute; bottom: 20px; left: 20px;
+  color: #0f0; font-size: 16px;
+  text-shadow: 0 0 10px #0f0;
+}
+
+/* Title / Game Over / Stage Clear screens */
+.screen {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 20; pointer-events: all;
+}
+#title-screen {
+  background: radial-gradient(ellipse at center, #0a0a2e 0%, #000 70%);
+}
+#title-screen h1 {
+  font-size: 64px; color: #0ff;
+  text-shadow: 0 0 30px #0ff, 0 0 60px #08f;
+  margin-bottom: 20px;
+  animation: glow 2s ease-in-out infinite alternate;
+}
+@keyframes glow {
+  from { text-shadow: 0 0 20px #0ff, 0 0 40px #08f; }
+  to { text-shadow: 0 0 40px #0ff, 0 0 80px #08f, 0 0 120px #04f; }
+}
+#title-screen p {
+  color: #88f; font-size: 20px; margin-bottom: 40px;
+}
+.btn {
+  padding: 15px 50px; font-size: 24px; font-weight: bold;
+  color: #fff; background: linear-gradient(135deg, #08f, #0cf);
+  border: none; border-radius: 30px; cursor: pointer;
+  box-shadow: 0 0 20px rgba(0,200,255,0.5);
+  transition: all 0.3s;
+}
+.btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 40px rgba(0,200,255,0.8);
+}
+#gameover-screen {
+  background: rgba(0,0,0,0.85); display: none;
+}
+#gameover-screen h1 {
+  font-size: 56px; color: #f44;
+  text-shadow: 0 0 30px #f00;
+  margin-bottom: 10px;
+}
+#gameover-screen .final-score {
+  font-size: 28px; color: #ff0; margin-bottom: 30px;
+}
+#stageclear-screen {
+  background: rgba(0,0,0,0.8); display: none;
+}
+#stageclear-screen h1 {
+  font-size: 56px; color: #0f0;
+  text-shadow: 0 0 30px #0f0;
+  margin-bottom: 10px;
+}
+#stageclear-screen p {
+  font-size: 22px; color: #8f8; margin-bottom: 30px;
+}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- UI -->
+<div id="ui">
+  <div id="score">SCORE: 0</div>
+  <div id="lives">♥♥♥</div>
+  <div id="stage-info">STAGE 1</div>
+  <div id="boss-label">⚠ BOSS ⚠</div>
+  <div id="boss-hp-container"><div id="boss-hp"></div></div>
+  <div id="powerup-display"></div>
+</div>
+
+<!-- Title Screen -->
+<div id="title-screen" class="screen">
+  <h1>🚀 3D SPACE SHOOTER</h1>
+  <p>矢印キーで移動 ／ スペースで射撃</p>
+  <button class="btn" onclick="startGame()">START</button>
+</div>
+
+<!-- Game Over Screen -->
+<div id="gameover-screen" class="screen">
+  <h1>GAME OVER</h1>
+  <div class="final-score" id="final-score">SCORE: 0</div>
+  <button class="btn" onclick="startGame()">RETRY</button>
+</div>
+
+<!-- Stage Clear Screen -->
+<div id="stageclear-screen" class="screen">
+  <h1>STAGE CLEAR!</h1>
+  <p id="stageclear-text">次のステージへ進もう！</p>
+  <button class="btn" onclick="nextStage()">NEXT STAGE</button>
+</div>
+
+<script>
+// ============================================
+// 3D Space Shooter - 航志
+// ============================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// --- Game State ---
+let gameRunning = false;
+let score = 0;
+let lives = 3;
+let stage = 1;
+let stageTimer = 0;
+let bossActive = false;
+let boss = null;
+let shakeTimer = 0;
+let powerupType = null;
+let powerupTimer = 0;
+
+// --- Stars (3D background) ---
+const stars = [];
+const STAR_COUNT = 400;
+for (let i = 0; i < STAR_COUNT; i++) {
+  stars.push({
+    x: (Math.random() - 0.5) * 2000,
+    y: (Math.random() - 0.5) * 2000,
+    z: Math.random() * 2000
+  });
+}
+
+// --- Player ---
+let player = { x: 0, y: 0, z: 0, speed: 6, shootCooldown: 0 };
+
+// --- Bullets ---
+let bullets = [];
+let enemyBullets = [];
+
+// --- Enemies ---
+let enemies = [];
+let spawnTimer = 0;
+
+// --- Powerups ---
+let powerups = [];
+
+// --- Explosions ---
+let explosions = [];
+
+// --- Timer IDs ---
+let gameOverTimerId = null;
+
+// --- Keys ---
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.code] = true; e.preventDefault(); });
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// --- Stage Config ---
+function getStageConfig(s) {
+  return {
+    spawnRate: Math.max(30, 80 - s * 10),  // 敵の出現間隔を広く
+    enemySpeed: 2 + s * 0.5,               // 敵の移動を遅く
+    enemyHP: 1,                             // 敵は1発で倒せる
+    bossHP: 15 + s * 10,                    // ボスHP低め
+    bossAfter: 500 - s * 50,               // frames until boss
+    bgColor: s === 1 ? '#0a0a2e' : s === 2 ? '#1a0a20' : '#0a1a10'
+  };
+}
+
+// ============================================
+// Start Game
+// ============================================
+function startGame() {
+  // 前回のsetTimeoutをキャンセル
+  if (gameOverTimerId) { clearTimeout(gameOverTimerId); gameOverTimerId = null; }
+  document.getElementById('title-screen').style.display = 'none';
+  document.getElementById('gameover-screen').style.display = 'none';
+  document.getElementById('stageclear-screen').style.display = 'none';
+  score = 0;
+  lives = 5;
+  stage = 1;
+  // キー状態をリセット（前回の入力が残らないように）
+  for (const k in keys) keys[k] = false;
+  initStage();
+  gameRunning = true;
+  if (!window._loopStarted) {
+    window._loopStarted = true;
+    gameLoop();
+  }
+}
+
+function initStage() {
+  player = { x: canvas.width / 2, y: canvas.height - 120, speed: 6, shootCooldown: 0 };
+  bullets = [];
+  enemyBullets = [];
+  enemies = [];
+  powerups = [];
+  explosions = [];
+  spawnTimer = 0;
+  stageTimer = 0;
+  shakeTimer = 0;
+  bossActive = false;
+  boss = null;
+  powerupType = null;
+  powerupTimer = 0;
+  document.getElementById('boss-hp-container').style.display = 'none';
+  document.getElementById('boss-label').style.display = 'none';
+  updateUI();
+}
+
+function nextStage() {
+  document.getElementById('stageclear-screen').style.display = 'none';
+  stage++;
+  initStage();
+  gameRunning = true;
+}
+
+// ============================================
+// Update UI
+// ============================================
+function updateUI() {
+  document.getElementById('score').textContent = 'SCORE: ' + score;
+  document.getElementById('lives').textContent = '♥'.repeat(Math.max(0, lives));
+  document.getElementById('stage-info').textContent = 'STAGE ' + stage;
+  if (powerupType && powerupTimer > 0) {
+    const names = { spread: '🔥 3WAY SHOT', shield: '🛡 SHIELD', rapid: '⚡ RAPID FIRE' };
+    document.getElementById('powerup-display').textContent = names[powerupType] + ' ' + Math.ceil(powerupTimer / 60) + 's';
+  } else {
+    document.getElementById('powerup-display').textContent = '';
+  }
+}
+
+// ============================================
+// Spawn Enemy
+// ============================================
+function spawnEnemy() {
+  const cfg = getStageConfig(stage);
+  const type = Math.random() < 0.3 ? 'ufo' : 'alien';
+  enemies.push({
+    x: Math.random() * (canvas.width - 80) + 40,
+    y: -60,
+    z: 800 + Math.random() * 400,
+    vx: (Math.random() - 0.5) * 2,
+    vy: cfg.enemySpeed,
+    type: type,
+    hp: cfg.enemyHP,
+    maxHP: cfg.enemyHP,
+    shootTimer: 60 + Math.random() * 120,
+    wobble: Math.random() * Math.PI * 2,
+    size: type === 'ufo' ? 40 : 30
+  });
+}
+
+// ============================================
+// Spawn Boss
+// ============================================
+function spawnBoss() {
+  const cfg = getStageConfig(stage);
+  bossActive = true;
+  boss = {
+    x: canvas.width / 2,
+    y: 100,
+    hp: cfg.bossHP,
+    maxHP: cfg.bossHP,
+    phase: 0,
+    timer: 0,
+    shootTimer: 0,
+    size: 80,
+    hit: 0
+  };
+  document.getElementById('boss-hp-container').style.display = 'block';
+  document.getElementById('boss-label').style.display = 'block';
+}
+
+// ============================================
+// Spawn Powerup
+// ============================================
+function spawnPowerup(x, y) {
+  const types = ['spread', 'shield', 'rapid'];
+  powerups.push({
+    x: x, y: y,
+    type: types[Math.floor(Math.random() * types.length)],
+    vy: 2, life: 300
+  });
+}
+
+// ============================================
+// Create Explosion
+// ============================================
+function createExplosion(x, y, size, color) {
+  const particles = [];
+  for (let i = 0; i < 20; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 4;
+    particles.push({
+      x: x, y: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 30 + Math.random() * 20,
+      maxLife: 50,
+      size: 2 + Math.random() * size,
+      color: color
+    });
+  }
+  explosions.push(...particles);
+}
+
+// ============================================
+// Draw 3D Star Field
+// ============================================
+function drawStars() {
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  for (let s of stars) {
+    s.z -= 4 + stage;
+    if (s.z <= 0) {
+      s.z = 2000;
+      s.x = (Math.random() - 0.5) * 2000;
+      s.y = (Math.random() - 0.5) * 2000;
+    }
+    const perspective = 600 / s.z;
+    const sx = cx + s.x * perspective;
+    const sy = cy + s.y * perspective;
+    const size = Math.max(0.5, 3 * perspective);
+    const brightness = Math.min(255, Math.floor(255 * (1 - s.z / 2000)));
+    ctx.fillStyle = `rgb(${brightness},${brightness},${Math.min(255, brightness + 50)})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// ============================================
+// Draw 3D Ship (Player)
+// ============================================
+function drawPlayer() {
+  const px = player.x;
+  const py = player.y;
+
+  ctx.save();
+  ctx.translate(px, py);
+
+  // Engine glow
+  const glowGrad = ctx.createRadialGradient(0, 25, 0, 0, 25, 30);
+  glowGrad.addColorStop(0, 'rgba(0,200,255,0.8)');
+  glowGrad.addColorStop(0.5, 'rgba(0,100,255,0.3)');
+  glowGrad.addColorStop(1, 'rgba(0,50,255,0)');
+  ctx.fillStyle = glowGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, 30, 15 + Math.random() * 5, 25 + Math.random() * 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ship body (3D-ish with gradients)
+  // Main hull
+  const bodyGrad = ctx.createLinearGradient(-25, -30, 25, 30);
+  bodyGrad.addColorStop(0, '#4488ff');
+  bodyGrad.addColorStop(0.5, '#2255cc');
+  bodyGrad.addColorStop(1, '#113388');
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.moveTo(0, -35);
+  ctx.lineTo(-22, 20);
+  ctx.lineTo(-8, 25);
+  ctx.lineTo(0, 15);
+  ctx.lineTo(8, 25);
+  ctx.lineTo(22, 20);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#6af';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Cockpit
+  const cockpitGrad = ctx.createRadialGradient(0, -10, 2, 0, -10, 12);
+  cockpitGrad.addColorStop(0, '#aff');
+  cockpitGrad.addColorStop(1, '#08a');
+  ctx.fillStyle = cockpitGrad;
+  ctx.beginPath();
+  ctx.ellipse(0, -10, 6, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Wings (3D effect)
+  ctx.fillStyle = '#336';
+  ctx.beginPath();
+  ctx.moveTo(-20, 10);
+  ctx.lineTo(-38, 25);
+  ctx.lineTo(-30, 28);
+  ctx.lineTo(-15, 18);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(20, 10);
+  ctx.lineTo(38, 25);
+  ctx.lineTo(30, 28);
+  ctx.lineTo(15, 18);
+  ctx.closePath();
+  ctx.fill();
+
+  // Shield effect
+  if (powerupType === 'shield' && powerupTimer > 0) {
+    ctx.strokeStyle = `rgba(0,255,200,${0.3 + 0.3 * Math.sin(Date.now() / 100)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 45, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// ============================================
+// Draw 3D Enemy
+// ============================================
+function drawEnemy(e) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+
+  const scale = Math.max(0.3, 1 - (e.z - 200) / 1200);
+  ctx.scale(scale, scale);
+
+  if (e.type === 'ufo') {
+    // UFO body
+    const ufoGrad = ctx.createRadialGradient(0, 0, 5, 0, 0, 40);
+    ufoGrad.addColorStop(0, '#8f8');
+    ufoGrad.addColorStop(0.6, '#4a4');
+    ufoGrad.addColorStop(1, '#242');
+    ctx.fillStyle = ufoGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 40, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#6f6';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Dome
+    const domeGrad = ctx.createRadialGradient(0, -8, 2, 0, -8, 18);
+    domeGrad.addColorStop(0, '#cfc');
+    domeGrad.addColorStop(1, '#4a4');
+    ctx.fillStyle = domeGrad;
+    ctx.beginPath();
+    ctx.arc(0, -8, 18, Math.PI, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    // Lights
+    for (let i = 0; i < 5; i++) {
+      const lx = -24 + i * 12;
+      const blink = Math.sin(Date.now() / 100 + i) > 0;
+      ctx.fillStyle = blink ? '#ff0' : '#880';
+      ctx.beginPath();
+      ctx.arc(lx, 5, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    // Alien
+    const alienGrad = ctx.createRadialGradient(0, 0, 5, 0, 0, 30);
+    alienGrad.addColorStop(0, '#f8f');
+    alienGrad.addColorStop(1, '#808');
+    ctx.fillStyle = alienGrad;
+
+    // Head
+    ctx.beginPath();
+    ctx.arc(0, -10, 18, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Eyes
+    ctx.fillStyle = '#ff0';
+    ctx.beginPath();
+    ctx.ellipse(-8, -12, 6, 8, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(8, -12, 6, 8, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    // Pupils
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(-8, -12, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(8, -12, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tentacles
+    ctx.strokeStyle = '#f8f';
+    ctx.lineWidth = 3;
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * 10, 5);
+      ctx.quadraticCurveTo(i * 15, 20 + Math.sin(Date.now() / 200 + i) * 5, i * 8, 30);
+      ctx.stroke();
+    }
+  }
+
+  // HP bar (if hp > 1)
+  if (e.maxHP > 1) {
+    ctx.fillStyle = 'rgba(255,0,0,0.5)';
+    ctx.fillRect(-20, -e.size - 10, 40, 5);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(-20, -e.size - 10, 40 * (e.hp / e.maxHP), 5);
+  }
+
+  ctx.restore();
+}
+
+// ============================================
+// Draw Boss
+// ============================================
+function drawBoss() {
+  if (!boss) return;
+  ctx.save();
+  ctx.translate(boss.x, boss.y);
+
+  const pulse = Math.sin(Date.now() / 200) * 5;
+
+  // Aura
+  const auraGrad = ctx.createRadialGradient(0, 0, 40, 0, 0, 100 + pulse);
+  auraGrad.addColorStop(0, 'rgba(255,0,0,0.2)');
+  auraGrad.addColorStop(1, 'rgba(255,0,0,0)');
+  ctx.fillStyle = auraGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, 100 + pulse, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Main body
+  const bGrad = ctx.createRadialGradient(0, 0, 10, 0, 0, 70);
+  bGrad.addColorStop(0, '#f66');
+  bGrad.addColorStop(0.5, '#a00');
+  bGrad.addColorStop(1, '#400');
+  ctx.fillStyle = bGrad;
+  ctx.beginPath();
+  ctx.moveTo(0, -70);
+  ctx.lineTo(-60, -20);
+  ctx.lineTo(-80, 30);
+  ctx.lineTo(-40, 50);
+  ctx.lineTo(0, 40);
+  ctx.lineTo(40, 50);
+  ctx.lineTo(80, 30);
+  ctx.lineTo(60, -20);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#f88';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Boss Eye
+  const eyeGrad = ctx.createRadialGradient(0, -10, 5, 0, -10, 25);
+  eyeGrad.addColorStop(0, '#ff0');
+  eyeGrad.addColorStop(0.5, '#f80');
+  eyeGrad.addColorStop(1, '#f00');
+  ctx.fillStyle = eyeGrad;
+  ctx.beginPath();
+  ctx.arc(0, -10, 25, 0, Math.PI * 2);
+  ctx.fill();
+  // Pupil follows player
+  const dx = player.x - boss.x;
+  const dy = player.y - boss.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const px = (dx / dist) * 8;
+  const py = (dy / dist) * 8;
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(px, -10 + py, 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Side cannons
+  ctx.fillStyle = '#800';
+  ctx.fillRect(-90, 10, 20, 30);
+  ctx.fillRect(70, 10, 20, 30);
+  // Cannon glow
+  if (boss.shootTimer < 10) {
+    ctx.fillStyle = 'rgba(255,100,0,0.6)';
+    ctx.beginPath();
+    ctx.arc(-80, 45, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(80, 45, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Hit flash
+  if (boss.hit > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${boss.hit / 10})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, 70, 0, Math.PI * 2);
+    ctx.fill();
+    boss.hit--;
+  }
+
+  ctx.restore();
+
+  // HP bar
+  document.getElementById('boss-hp').style.width = (boss.hp / boss.maxHP * 100) + '%';
+}
+
+// ============================================
+// Draw Bullet
+// ============================================
+function drawBullet(b) {
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, b.size || 6);
+  grad.addColorStop(0, b.color || '#0ff');
+  grad.addColorStop(1, 'rgba(0,200,255,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, b.size || 6, 0, Math.PI * 2);
+  ctx.fill();
+  // Core
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(0, 0, 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawEnemyBullet(b) {
+  ctx.save();
+  ctx.translate(b.x, b.y);
+
+  // 外側のグロウ（大きく光る）
+  ctx.shadowColor = '#f44';
+  ctx.shadowBlur = 15;
+
+  // グラデーション（赤〜オレンジ）
+  const size = b.size || 8;
+  const grad = ctx.createRadialGradient(0, 0, 1, 0, 0, size);
+  grad.addColorStop(0, '#fff');
+  grad.addColorStop(0.3, b.color || '#f44');
+  grad.addColorStop(1, 'rgba(255,50,0,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, size, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 内側コア（白く光る）
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(0, 0, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 尾っぽ（進行方向の逆に伸びる）
+  const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+  if (speed > 0) {
+    const tailX = -b.vx / speed * size * 2;
+    const tailY = -b.vy / speed * size * 2;
+    const tailGrad = ctx.createLinearGradient(0, 0, tailX, tailY);
+    tailGrad.addColorStop(0, 'rgba(255,100,0,0.6)');
+    tailGrad.addColorStop(1, 'rgba(255,50,0,0)');
+    ctx.strokeStyle = tailGrad;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(tailX, tailY);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+// ============================================
+// Draw Powerup Item
+// ============================================
+function drawPowerup(p) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  const rot = Date.now() / 500;
+  ctx.rotate(rot);
+
+  const colors = { spread: '#f80', shield: '#0ff', rapid: '#ff0' };
+  const icons = { spread: '🔥', shield: '🛡', rapid: '⚡' };
+
+  ctx.fillStyle = colors[p.type];
+  ctx.shadowColor = colors[p.type];
+  ctx.shadowBlur = 15;
+  ctx.beginPath();
+  // Diamond shape
+  ctx.moveTo(0, -15);
+  ctx.lineTo(15, 0);
+  ctx.lineTo(0, 15);
+  ctx.lineTo(-15, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  ctx.restore();
+
+  // Icon
+  ctx.font = '16px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(icons[p.type], p.x, p.y + 5);
+}
+
+// ============================================
+// Collision Check
+// ============================================
+function collide(a, b, ra, rb) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy < (ra + rb) * (ra + rb);
+}
+
+// ============================================
+// Game Loop
+// ============================================
+function gameLoop() {
+  if (!gameRunning) {
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
+  const cfg = getStageConfig(stage);
+
+  // --- Clear ---
+  ctx.fillStyle = cfg.bgColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Screen shake（毎フレームsave/restoreする）
+  ctx.save();
+  if (shakeTimer > 0) {
+    ctx.translate((Math.random() - 0.5) * shakeTimer * 2, (Math.random() - 0.5) * shakeTimer * 2);
+    shakeTimer--;
+  }
+
+  // --- Stars ---
+  drawStars();
+
+  // --- Player Input ---
+  if (keys['ArrowLeft'] || keys['KeyA']) player.x -= player.speed;
+  if (keys['ArrowRight'] || keys['KeyD']) player.x += player.speed;
+  if (keys['ArrowUp'] || keys['KeyW']) player.y -= player.speed;
+  if (keys['ArrowDown'] || keys['KeyS']) player.y += player.speed;
+
+  // Clamp
+  player.x = Math.max(30, Math.min(canvas.width - 30, player.x));
+  player.y = Math.max(30, Math.min(canvas.height - 30, player.y));
+
+  // Shoot
+  player.shootCooldown--;
+  const cooldown = powerupType === 'rapid' ? 5 : 12;
+  if (keys['Space'] && player.shootCooldown <= 0) {
+    player.shootCooldown = cooldown;
+    if (powerupType === 'spread' && powerupTimer > 0) {
+      // 3-way shot
+      bullets.push({ x: player.x, y: player.y - 30, vx: -3, vy: -10, color: '#f80' });
+      bullets.push({ x: player.x, y: player.y - 30, vx: 0, vy: -10, color: '#f80' });
+      bullets.push({ x: player.x, y: player.y - 30, vx: 3, vy: -10, color: '#f80' });
+    } else {
+      bullets.push({ x: player.x, y: player.y - 30, vx: 0, vy: -10, color: '#0ff' });
+    }
+  }
+
+  // Powerup timer
+  if (powerupTimer > 0) {
+    powerupTimer--;
+    if (powerupTimer <= 0) powerupType = null;
+  }
+
+  // --- Update Bullets ---
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.x += b.vx || 0;
+    b.y += b.vy;
+    if (b.y < -10 || b.x < -10 || b.x > canvas.width + 10) {
+      bullets.splice(i, 1);
+    }
+  }
+
+  // --- Enemy Bullets ---
+  for (let i = enemyBullets.length - 1; i >= 0; i--) {
+    const b = enemyBullets[i];
+    b.x += b.vx;
+    b.y += b.vy;
+    if (b.y > canvas.height + 10 || b.y < -10 || b.x < -10 || b.x > canvas.width + 10) {
+      enemyBullets.splice(i, 1);
+      continue;
+    }
+    // Hit player
+    if (collide(b, player, 5, 20)) {
+      enemyBullets.splice(i, 1);
+      if (powerupType === 'shield' && powerupTimer > 0) {
+        powerupTimer = 0;
+        powerupType = null;
+      } else {
+        lives--;
+        shakeTimer = 10;
+        createExplosion(player.x, player.y, 3, '#08f');
+        if (lives <= 0) {
+          ctx.restore();
+          gameOver();
+          return;
+        }
+      }
+    }
+  }
+
+  // --- Spawn Enemies ---
+  stageTimer++;
+  if (!bossActive) {
+    spawnTimer--;
+    if (spawnTimer <= 0) {
+      spawnEnemy();
+      spawnTimer = cfg.spawnRate;
+    }
+    // Boss trigger
+    if (stageTimer > cfg.bossAfter) {
+      enemies = []; // 残った敵を消してボス戦へ
+      spawnBoss();
+    }
+  }
+
+  // --- Update Enemies ---
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+    e.wobble += 0.03;
+    e.x += e.vx + Math.sin(e.wobble) * 1.5;
+    e.y += e.vy;
+    if (e.z > 200) e.z -= 3;
+
+    // Shoot
+    e.shootTimer--;
+    if (e.shootTimer <= 0 && e.y > 0 && e.y < canvas.height - 100) {
+      e.shootTimer = 120 + Math.random() * 80;  // 敵の射撃間隔を長く
+      const angle = Math.atan2(player.y - e.y, player.x - e.x);
+      enemyBullets.push({
+        x: e.x, y: e.y,
+        vx: Math.cos(angle) * 3,   // 弾を遅く
+        vy: Math.sin(angle) * 3,
+        color: '#f44', size: 8
+      });
+    }
+
+    // Off screen
+    if (e.y > canvas.height + 60) {
+      enemies.splice(i, 1);
+      continue;
+    }
+
+    // Bullet collision
+    for (let j = bullets.length - 1; j >= 0; j--) {
+      if (collide(bullets[j], e, 6, e.size * Math.max(0.3, 1 - (e.z - 200) / 1200))) {
+        bullets.splice(j, 1);
+        e.hp--;
+        if (e.hp <= 0) {
+          score += e.type === 'ufo' ? 150 : 100;
+          createExplosion(e.x, e.y, 4, e.type === 'ufo' ? '#0f0' : '#f0f');
+          // Drop powerup (15% chance)
+          if (Math.random() < 0.3) spawnPowerup(e.x, e.y);  // パワーアップ多め
+          enemies.splice(i, 1);
+        }
+        break;
+      }
+    }
+
+    // Collide with player
+    if (i < enemies.length && collide(enemies[i], player, enemies[i].size * 0.7, 20)) {
+      createExplosion(enemies[i].x, enemies[i].y, 4, '#ff0');
+      enemies.splice(i, 1);
+      if (powerupType === 'shield' && powerupTimer > 0) {
+        powerupTimer = 0;
+        powerupType = null;
+      } else {
+        lives--;
+        shakeTimer = 15;
+        createExplosion(player.x, player.y, 3, '#08f');
+        if (lives <= 0) { ctx.restore(); gameOver(); return; }
+      }
+    }
+  }
+
+  // --- Update Boss ---
+  if (bossActive && boss) {
+    boss.timer++;
+    boss.shootTimer--;
+
+    // Movement pattern
+    if (boss.phase === 0) {
+      boss.x = canvas.width / 2 + Math.sin(boss.timer / 60) * (canvas.width / 3);
+    } else {
+      boss.x += Math.cos(boss.timer / 30) * 4;
+      boss.y = 80 + Math.sin(boss.timer / 50) * 40;
+    }
+
+    // Phase change
+    if (boss.hp < boss.maxHP * 0.5 && boss.phase === 0) {
+      boss.phase = 1;
+    }
+
+    // Boss shoot
+    if (boss.shootTimer <= 0) {
+      if (boss.phase === 0) {
+        boss.shootTimer = 40;
+        const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+        enemyBullets.push({
+          x: boss.x - 80, y: boss.y + 45,
+          vx: Math.cos(angle - 0.1) * 5, vy: Math.sin(angle - 0.1) * 5,
+          color: '#f80', size: 10
+        });
+        enemyBullets.push({
+          x: boss.x + 80, y: boss.y + 45,
+          vx: Math.cos(angle + 0.1) * 5, vy: Math.sin(angle + 0.1) * 5,
+          color: '#f80', size: 10
+        });
+      } else {
+        boss.shootTimer = 15;
+        const spread = 8;
+        for (let a = -spread; a <= spread; a += 4) {
+          const rad = (a + 90) * Math.PI / 180;
+          enemyBullets.push({
+            x: boss.x, y: boss.y + 40,
+            vx: Math.cos(rad) * 4,
+            vy: Math.sin(rad) * 4,
+            color: '#f44', size: 8
+          });
+        }
+      }
+    }
+
+    // Boss bullet collision
+    for (let j = bullets.length - 1; j >= 0; j--) {
+      if (collide(bullets[j], boss, 6, 70)) {
+        bullets.splice(j, 1);
+        boss.hp--;
+        boss.hit = 8;
+        score += 10;
+        if (boss.hp <= 0) {
+          score += 1000 * stage;
+          createExplosion(boss.x, boss.y, 8, '#f00');
+          createExplosion(boss.x - 30, boss.y + 20, 6, '#ff0');
+          createExplosion(boss.x + 30, boss.y - 20, 6, '#f80');
+          shakeTimer = 30;
+          bossActive = false;
+          boss = null;
+          document.getElementById('boss-hp-container').style.display = 'none';
+          document.getElementById('boss-label').style.display = 'none';
+          // Stage clear
+          setTimeout(() => {
+            gameRunning = false;
+            document.getElementById('stageclear-text').textContent =
+              stage < 3 ? 'ステージ ' + stage + ' クリア！次へ進もう！' : '全ステージクリア！おめでとう！🎉';
+            document.getElementById('stageclear-screen').style.display = 'flex';
+            if (stage >= 3) {
+              document.querySelector('#stageclear-screen .btn').textContent = 'もう一度遊ぶ';
+              document.querySelector('#stageclear-screen .btn').onclick = startGame;
+            } else {
+              document.querySelector('#stageclear-screen .btn').textContent = 'NEXT STAGE';
+              document.querySelector('#stageclear-screen .btn').onclick = nextStage;
+            }
+          }, 1500);
+          break;
+        }
+      }
+    }
+  }
+
+  // --- Powerups ---
+  for (let i = powerups.length - 1; i >= 0; i--) {
+    const p = powerups[i];
+    p.y += p.vy;
+    p.life--;
+    if (p.life <= 0 || p.y > canvas.height + 20) {
+      powerups.splice(i, 1);
+      continue;
+    }
+    if (collide(p, player, 15, 25)) {
+      powerupType = p.type;
+      powerupTimer = 600; // 10 seconds
+      powerups.splice(i, 1);
+    }
+  }
+
+  // --- Explosions ---
+  for (let i = explosions.length - 1; i >= 0; i--) {
+    const p = explosions[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.97;
+    p.vy *= 0.97;
+    p.life--;
+    if (p.life <= 0) {
+      explosions.splice(i, 1);
+    }
+  }
+
+  // ============================================
+  // DRAW
+  // ============================================
+
+  // Enemies
+  for (let e of enemies) drawEnemy(e);
+
+  // Boss
+  if (boss) drawBoss();
+
+  // Player
+  drawPlayer();
+
+  // Bullets
+  for (let b of bullets) drawBullet(b);
+  for (let b of enemyBullets) {
+    drawEnemyBullet(b);
+  }
+
+  // Powerups
+  for (let p of powerups) drawPowerup(p);
+
+  // Explosions
+  for (let p of explosions) {
+    const alpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color || `rgba(255,${Math.floor(150 * alpha)},0,${alpha})`;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+
+  updateUI();
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================
+// Game Over
+// ============================================
+function gameOver() {
+  if (!gameRunning) return; // 二重呼び出し防止
+  gameRunning = false;
+  createExplosion(player.x, player.y, 8, '#08f');
+  document.getElementById('final-score').textContent = 'SCORE: ' + score;
+  document.getElementById('gameover-screen').style.display = 'flex';
+  // returnでループが止まるので、ここで再開する
+  requestAnimationFrame(gameLoop);
+}
+</script>
+
+</body>
+</html>
