@@ -1,0 +1,231 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Fredoka', sans-serif;
+  background: #1a1a2e;
+  color: #fff;
+  overflow: hidden;
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Screens */
+.screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* Title Screen */
+#screen-title {
+  background: linear-gradient(135deg, #ff6b9d, #c44dff, #6ec6ff);
+  background-size: 400% 400%;
+  animation: gradientShift 4s ease infinite;
+  gap: 16px;
+}
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.title-art {
+  font-size: 64px;
+  display: flex;
+  gap: 24px;
+  animation: bounce 1.5s ease infinite;
+}
+
+.title-zombie {
+  animation: wobble 2s ease infinite;
+}
+
+.title-pigeon {
+  animation: wobble 2s ease infinite 0.5s;
+}
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(-8deg) scale(1); }
+  50% { transform: rotate(8deg) scale(1.1); }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+#screen-title h1 {
+  font-size: 48px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.1;
+  text-shadow: 3px 3px 0 rgba(0,0,0,0.3);
+  letter-spacing: 4px;
+}
+
+.subtitle {
+  font-size: 16px;
+  opacity: 0.9;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.2);
+}
+
+.how-to-play {
+  margin-top: 8px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+/* Buttons */
+.btn-pop {
+  font-family: 'Fredoka', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  padding: 14px 48px;
+  border: none;
+  border-radius: 50px;
+  background: #ffe14d;
+  color: #1a1a2e;
+  cursor: pointer;
+  box-shadow: 0 6px 0 #d4a800, 0 8px 20px rgba(0,0,0,0.3);
+  transition: all 0.1s;
+  letter-spacing: 2px;
+}
+
+.btn-pop:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 #d4a800, 0 4px 10px rgba(0,0,0,0.3);
+}
+
+/* Game Screen */
+#screen-game {
+  background: #16213e;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+#hud {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.hud-item {
+  background: rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-label {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.hud-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffe14d;
+}
+
+#maze-canvas {
+  border-radius: 12px;
+  box-shadow: 0 0 40px rgba(110, 198, 255, 0.2);
+  max-width: 100%;
+  max-height: calc(100dvh - 140px);
+  touch-action: none;
+}
+
+/* Mobile Controls */
+#mobile-controls {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 8px;
+}
+
+.ctrl-row {
+  display: flex;
+  gap: 4px;
+}
+
+.ctrl-btn {
+  width: 56px;
+  height: 56px;
+  font-size: 22px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s;
+}
+
+.ctrl-btn:active {
+  background: rgba(255, 225, 77, 0.4);
+}
+
+@media (pointer: coarse) {
+  #mobile-controls {
+    display: flex;
+  }
+  #maze-canvas {
+    max-height: calc(100dvh - 260px);
+  }
+}
+
+/* Clear / Over Screens */
+#screen-clear, #screen-over {
+  gap: 24px;
+}
+
+#screen-clear {
+  background: linear-gradient(135deg, #43e97b, #38f9d7);
+}
+
+#screen-clear h2 {
+  font-size: 48px;
+  text-shadow: 3px 3px 0 rgba(0,0,0,0.2);
+  animation: bounce 1s ease infinite;
+}
+
+#screen-over {
+  background: linear-gradient(135deg, #ff5858, #f857a6);
+}
+
+#screen-over h2 {
+  font-size: 48px;
+  text-shadow: 3px 3px 0 rgba(0,0,0,0.2);
+}
+
+#screen-clear p, #screen-over p {
+  font-size: 20px;
+  opacity: 0.9;
+}

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZOMBIE & PIGEON MAZE</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="screen-title" class="screen active">
+    <div class="title-art">
+      <span class="title-zombie">🧟</span>
+      <span class="title-pigeon">🐦</span>
+    </div>
+    <h1>ZOMBIE<br>&amp;<br>PIGEON<br>MAZE</h1>
+    <p class="subtitle">ゾンビから逃げろ！鳩を全部集めてゴールへ！</p>
+    <button id="btn-start" class="btn-pop">START</button>
+    <div class="how-to-play">
+      <p>🎮 矢印キー / WASD / スワイプで移動</p>
+    </div>
+  </div>
+
+  <div id="screen-game" class="screen">
+    <div id="hud">
+      <div class="hud-item">
+        <span class="hud-label">LEVEL</span>
+        <span id="hud-level" class="hud-value">1</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">🐦</span>
+        <span id="hud-pigeons" class="hud-value">0/0</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">❤️</span>
+        <span id="hud-lives" class="hud-value">3</span>
+      </div>
+      <div class="hud-item">
+        <span class="hud-label">⏱️</span>
+        <span id="hud-time" class="hud-value">0</span>
+      </div>
+    </div>
+    <canvas id="maze-canvas"></canvas>
+    <div id="mobile-controls">
+      <button class="ctrl-btn" data-dir="up">▲</button>
+      <div class="ctrl-row">
+        <button class="ctrl-btn" data-dir="left">◀</button>
+        <button class="ctrl-btn" data-dir="down">▼</button>
+        <button class="ctrl-btn" data-dir="right">▶</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-clear" class="screen">
+    <h2>🎉 STAGE CLEAR!</h2>
+    <p id="clear-time"></p>
+    <button id="btn-next" class="btn-pop">NEXT STAGE →</button>
+  </div>
+
+  <div id="screen-over" class="screen">
+    <h2>💀 GAME OVER</h2>
+    <p id="over-level"></p>
+    <button id="btn-retry" class="btn-pop">RETRY</button>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
